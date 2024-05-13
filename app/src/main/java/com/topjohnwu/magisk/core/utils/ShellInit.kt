@@ -13,6 +13,8 @@ import com.topjohnwu.magisk.core.ktx.rawResource
 import com.topjohnwu.magisk.core.ktx.writeTo
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ShellUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.jar.JarFile
 
@@ -34,7 +36,9 @@ class ShellInit : Shell.Initializer() {
                 val bb = jar.getJarEntry("lib/${Const.CPU_ABI}/libbusybox.so")
                 localBB = context.deviceProtectedContext.cachedFile("busybox")
                 localBB.delete()
-                jar.getInputStream(bb).writeTo(localBB)
+                runBlocking {
+                    jar.getInputStream(bb).writeTo(localBB, dispatcher = Dispatchers.Unconfined)
+                }
                 localBB.setExecutable(true)
             } else {
                 localBB = File(context.applicationInfo.nativeLibraryDir, "libbusybox.so")
@@ -73,17 +77,17 @@ class ShellInit : Shell.Initializer() {
         fun getVar(name: String) = fastCmd("echo \$$name")
         fun getBool(name: String) = getVar(name).toBoolean()
 
-        Info.isSAR = getBool("SYSTEM_ROOT")
+        Info.isSAR = getBool("SYSTEM_AS_ROOT")
         Info.ramdisk = getBool("RAMDISKEXIST")
-        Info.vbmeta = getBool("VBMETAEXIST")
         Info.isAB = getBool("ISAB")
         Info.crypto = getVar("CRYPTOTYPE")
+        Info.patchBootVbmeta = getBool("PATCHVBMETAFLAG")
+        Info.legacySAR = getBool("LEGACYSAR")
 
         // Default presets
         Config.recovery = getBool("RECOVERYMODE")
         Config.keepVerity = getBool("KEEPVERITY")
         Config.keepEnc = getBool("KEEPFORCEENCRYPT")
-        Config.patchVbmeta = getBool("PATCHVBMETAFLAG")
 
         return true
     }

@@ -2,7 +2,7 @@
 #   AVD MagiskInit Setup
 #####################################################################
 #
-# Support API level: 23 - 33
+# Support API level: 23 - 34
 #
 # With an emulator booted and accessible via ADB, usage:
 # ./build.py avd_patch path/to/booted/avd-image/ramdisk.img
@@ -18,7 +18,7 @@
 # rootfs w/o early mount: API 23 - 25
 # rootfs with early mount: API 26 - 27
 # Legacy system-as-root: API 28
-# 2 stage init: API 29 - 33
+# 2 stage init: API 29 - 34
 #####################################################################
 
 if [ ! -f /system/build.prop ]; then
@@ -43,7 +43,7 @@ unzip -oj magisk.apk 'assets/util_functions.sh' 'assets/stub.apk'
 
 api_level_arch_detect
 
-unzip -oj magisk.apk "lib/$ABI/*" "lib/$ABI32/libmagisk32.so" -x "lib/$ABI/libbusybox.so"
+unzip -oj magisk.apk "lib/$ABI/*" -x "lib/$ABI/libbusybox.so"
 for file in lib*.so; do
   chmod 755 $file
   mv "$file" "${file:3:${#file}-6}"
@@ -57,36 +57,20 @@ export KEEPFORCEENCRYPT=true
 
 echo "KEEPVERITY=$KEEPVERITY" > config
 echo "KEEPFORCEENCRYPT=$KEEPFORCEENCRYPT" >> config
-if [ -e "/system/bin/linker64" ]; then
-  echo "PREINITDEVICE=$(./magisk64 --preinit-device)" >> config
-else
-  echo "PREINITDEVICE=$(./magisk32 --preinit-device)" >> config
-fi
+echo "PREINITDEVICE=$(./magisk --preinit-device)" >> config
 # For API 28, we also patch advancedFeatures.ini to disable SAR
 # Manually override skip_initramfs by setting RECOVERYMODE=true
 [ $API = "28" ] && echo 'RECOVERYMODE=true' >> config
-RANDOMSEED=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 16)
-echo "RANDOMSEED=0x$RANDOMSEED" >> config
 cat config
 
-SKIP32="#"
-SKIP64="#"
-if [ -f magisk64 ]; then
-  ./magiskboot compress=xz magisk64 magisk64.xz
-  unset SKIP64
-fi
-if [ -f magisk32 ]; then
-  ./magiskboot compress=xz magisk32 magisk32.xz
-  unset SKIP32
-fi
+./magiskboot compress=xz magisk magisk.xz
 ./magiskboot compress=xz stub.apk stub.xz
 
 ./magiskboot cpio ramdisk.cpio \
 "add 0750 init magiskinit" \
 "mkdir 0750 overlay.d" \
 "mkdir 0750 overlay.d/sbin" \
-"$SKIP32 add 0644 overlay.d/sbin/magisk32.xz magisk32.xz" \
-"$SKIP64 add 0644 overlay.d/sbin/magisk64.xz magisk64.xz" \
+"add 0644 overlay.d/sbin/magisk.xz magisk.xz" \
 "add 0644 overlay.d/sbin/stub.xz stub.xz" \
 "patch" \
 "backup ramdisk.cpio.orig" \

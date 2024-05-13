@@ -1,118 +1,15 @@
-use std::cmp::min;
-use std::ffi::CStr;
-use std::fmt::{Arguments, Debug};
-use std::str::Utf8Error;
-use std::{fmt, slice};
+use std::fmt::Arguments;
+use std::io::Write;
+use std::process::exit;
+use std::{fmt, io, slice, str};
 
-use thiserror::Error;
+use argh::EarlyExit;
+use libc::c_char;
 
-pub fn copy_str(dest: &mut [u8], src: &[u8]) -> usize {
-    let len = min(src.len(), dest.len() - 1);
-    dest[..len].copy_from_slice(&src[..len]);
-    dest[len] = b'\0';
-    len
-}
-
-struct BufFmtWriter<'a> {
-    buf: &'a mut [u8],
-    used: usize,
-}
-
-impl<'a> BufFmtWriter<'a> {
-    fn new(buf: &'a mut [u8]) -> Self {
-        BufFmtWriter { buf, used: 0 }
-    }
-}
-
-impl<'a> fmt::Write for BufFmtWriter<'a> {
-    // The buffer should always be null terminated
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        if self.used >= self.buf.len() - 1 {
-            // Silent truncate
-            return Ok(());
-        }
-        self.used += copy_str(&mut self.buf[self.used..], s.as_bytes());
-        // Silent truncate
-        Ok(())
-    }
-}
-
-pub fn fmt_to_buf(buf: &mut [u8], args: Arguments) -> usize {
-    let mut w = BufFmtWriter::new(buf);
-    if let Ok(()) = fmt::write(&mut w, args) {
-        w.used
-    } else {
-        0
-    }
-}
-
-#[macro_export]
-macro_rules! bfmt {
-    ($buf:expr, $($args:tt)*) => {
-        $crate::fmt_to_buf($buf, format_args!($($args)*));
-    };
-}
-
-#[macro_export]
-macro_rules! bfmt_cstr {
-    ($buf:expr, $($args:tt)*) => {{
-        let len = $crate::fmt_to_buf($buf, format_args!($($args)*));
-        unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(&$buf[..(len + 1)]) }
-    }};
-}
-
-// The cstr! macro is copied from https://github.com/bytecodealliance/rustix/blob/main/src/cstr.rs
-
-#[macro_export]
-macro_rules! cstr {
-    ($str:literal) => {{
-        assert!(
-            !$str.bytes().any(|b| b == b'\0'),
-            "cstr argument contains embedded NUL bytes",
-        );
-        unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(concat!($str, "\0").as_bytes()) }
-    }};
-}
-
-#[macro_export]
-macro_rules! raw_cstr {
-    ($s:literal) => {{
-        cstr!($s).as_ptr()
-    }};
-}
-
-#[derive(Debug, Error)]
-pub enum StrErr {
-    #[error(transparent)]
-    Invalid(#[from] Utf8Error),
-    #[error("argument is null")]
-    NullPointer,
-}
-
-pub fn ptr_to_str_result<'a, T>(ptr: *const T) -> Result<&'a str, StrErr> {
-    if ptr.is_null() {
-        Err(StrErr::NullPointer)
-    } else {
-        unsafe { CStr::from_ptr(ptr.cast()) }
-            .to_str()
-            .map_err(|e| StrErr::from(e))
-    }
-}
-
-pub fn ptr_to_str<'a, T>(ptr: *const T) -> &'a str {
-    if ptr.is_null() {
-        "(null)"
-    } else {
-        unsafe { CStr::from_ptr(ptr.cast()) }.to_str().unwrap_or("")
-    }
-}
+use crate::{ffi, StrErr, Utf8CStr};
 
 pub fn errno() -> &'static mut i32 {
     unsafe { &mut *libc::__errno() }
-}
-
-pub fn error_str() -> &'static str {
-    unsafe { ptr_to_str(libc::strerror(*errno())) }
 }
 
 // When len is 0, don't care whether buf is null or not
@@ -135,23 +32,132 @@ pub unsafe fn slice_from_ptr_mut<'a, T>(buf: *mut T, len: usize) -> &'a mut [T] 
     }
 }
 
-pub trait FlatData {
-    fn as_raw_bytes(&self) -> &[u8]
-    where
-        Self: Sized,
-    {
-        unsafe {
-            let self_ptr = self as *const Self as *const u8;
-            slice::from_raw_parts(self_ptr, std::mem::size_of::<Self>())
+// Check libc return value and map to Result
+pub trait LibcReturn
+where
+    Self: Copy,
+{
+    fn is_error(&self) -> bool;
+    fn check_os_err(self) -> io::Result<Self> {
+        if self.is_error() {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(self)
         }
     }
-    fn as_raw_bytes_mut(&mut self) -> &mut [u8]
-    where
-        Self: Sized,
-    {
-        unsafe {
-            let self_ptr = self as *mut Self as *mut u8;
-            slice::from_raw_parts_mut(self_ptr, std::mem::size_of::<Self>())
+    fn as_os_err(self) -> io::Result<()> {
+        self.check_os_err()?;
+        Ok(())
+    }
+}
+
+macro_rules! impl_libc_return {
+    ($($t:ty)*) => ($(
+        impl LibcReturn for $t {
+            #[inline]
+            fn is_error(&self) -> bool {
+                *self < 0
+            }
         }
+    )*)
+}
+
+impl_libc_return! { i8 i16 i32 i64 isize }
+
+impl<T> LibcReturn for *const T {
+    #[inline]
+    fn is_error(&self) -> bool {
+        self.is_null()
+    }
+}
+
+impl<T> LibcReturn for *mut T {
+    #[inline]
+    fn is_error(&self) -> bool {
+        self.is_null()
+    }
+}
+
+pub trait BytesExt {
+    fn find(&self, needle: &[u8]) -> Option<usize>;
+    fn contains(&self, needle: &[u8]) -> bool {
+        self.find(needle).is_some()
+    }
+}
+
+impl<T: AsRef<[u8]> + ?Sized> BytesExt for T {
+    fn find(&self, needle: &[u8]) -> Option<usize> {
+        fn inner(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+            unsafe {
+                let ptr: *const u8 = libc::memmem(
+                    haystack.as_ptr().cast(),
+                    haystack.len(),
+                    needle.as_ptr().cast(),
+                    needle.len(),
+                )
+                .cast();
+                if ptr.is_null() {
+                    None
+                } else {
+                    Some(ptr.offset_from(haystack.as_ptr()) as usize)
+                }
+            }
+        }
+        inner(self.as_ref(), needle)
+    }
+}
+
+pub trait MutBytesExt {
+    fn patch(&mut self, from: &[u8], to: &[u8]) -> Vec<usize>;
+}
+
+impl<T: AsMut<[u8]> + ?Sized> MutBytesExt for T {
+    fn patch(&mut self, from: &[u8], to: &[u8]) -> Vec<usize> {
+        ffi::mut_u8_patch(self.as_mut(), from, to)
+    }
+}
+
+// SAFETY: libc guarantees argc and argv are properly setup and are static
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn map_args(argc: i32, argv: *const *const c_char) -> Result<Vec<&'static str>, StrErr> {
+    unsafe { slice::from_raw_parts(argv, argc as usize) }
+        .iter()
+        .map(|s| unsafe { Utf8CStr::from_ptr(*s) }.map(|s| s.as_str()))
+        .collect()
+}
+
+pub trait EarlyExitExt<T> {
+    fn on_early_exit<F: FnOnce()>(self, print_help_msg: F) -> T;
+}
+
+impl<T> EarlyExitExt<T> for Result<T, EarlyExit> {
+    fn on_early_exit<F: FnOnce()>(self, print_help_msg: F) -> T {
+        match self {
+            Ok(t) => t,
+            Err(EarlyExit { output, status }) => match status {
+                Ok(_) => {
+                    print_help_msg();
+                    exit(0)
+                }
+                Err(_) => {
+                    eprintln!("{}", output);
+                    print_help_msg();
+                    exit(1)
+                }
+            },
+        }
+    }
+}
+
+pub struct FmtAdaptor<'a, T>(pub &'a mut T)
+where
+    T: Write;
+
+impl<T: Write> fmt::Write for FmtAdaptor<'_, T> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.0.write_all(s.as_bytes()).map_err(|_| fmt::Error)
+    }
+    fn write_fmt(&mut self, args: Arguments<'_>) -> fmt::Result {
+        self.0.write_fmt(args).map_err(|_| fmt::Error)
     }
 }

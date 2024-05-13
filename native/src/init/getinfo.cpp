@@ -213,12 +213,22 @@ bool check_two_stage() {
     if (access("/system/bin/init", F_OK) == 0)
         return true;
     // If we still have no indication, parse the original init and see what's up
-    auto init = mmap_data(backup_init());
+    mmap_data init(backup_init());
     return init.contains("selinux_setup");
 }
 
+void unxz_init(const char *init_xz, const char *init) {
+    LOGD("unxz %s -> %s\n", init_xz, init);
+    int fd = xopen(init, O_WRONLY | O_CREAT, 0777);
+    fd_stream ch(fd);
+    unxz(ch, mmap_data{init_xz});
+    close(fd);
+    clone_attr(init_xz, init);
+    unlink(init_xz);
+}
+
 const char *backup_init() {
-    if (access("/.backup/init.real", F_OK) == 0)
-        return "/.backup/init.real";
+    if (access("/.backup/init.xz", F_OK) == 0)
+        unxz_init("/.backup/init.xz", "/.backup/init");
     return "/.backup/init";
 }

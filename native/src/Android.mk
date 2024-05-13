@@ -10,11 +10,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := magisk
 LOCAL_STATIC_LIBRARIES := \
     libbase \
-    libnanopb \
     libsystemproperties \
-    libphmap \
     liblsplt \
-    libmincrypt \
     libmagisk-rs
 
 LOCAL_SRC_FILES := \
@@ -25,26 +22,23 @@ LOCAL_SRC_FILES := \
     core/socket.cpp \
     core/db.cpp \
     core/package.cpp \
-    core/cert.cpp \
     core/scripting.cpp \
-    core/restorecon.cpp \
+    core/selinux.cpp \
     core/module.cpp \
     core/thread.cpp \
-    core/resetprop/persist.cpp \
-    core/resetprop/resetprop.cpp \
     core/core-rs.cpp \
+    core/resetprop/resetprop.cpp \
     core/su/su.cpp \
     core/su/connect.cpp \
     core/su/pts.cpp \
     core/su/su_daemon.cpp \
-    zygisk/entry.cpp \
-    zygisk/main.cpp \
-    zygisk/utils.cpp \
-    zygisk/hook.cpp \
-    zygisk/memory.cpp \
-    zygisk/deny/cli.cpp \
-    zygisk/deny/utils.cpp \
-    zygisk/deny/revert.cpp
+    core/zygisk/entry.cpp \
+    core/zygisk/main.cpp \
+    core/zygisk/module.cpp \
+    core/zygisk/hook.cpp \
+    core/deny/cli.cpp \
+    core/deny/utils.cpp \
+    core/deny/logcat.cpp
 
 LOCAL_LDLIBS := -llog
 LOCAL_LDFLAGS := -Wl,--dynamic-list=src/exported_sym.txt
@@ -61,12 +55,6 @@ LOCAL_SRC_FILES := init/preload.c
 LOCAL_STRIP_MODE := --strip-all
 include $(BUILD_SHARED_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_MODULE := zygisk-ld
-LOCAL_SRC_FILES := zygisk/loader.c
-LOCAL_STRIP_MODE := --strip-all
-include $(BUILD_SHARED_LIBRARY)
-
 endif
 
 ifdef B_INIT
@@ -75,7 +63,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := magiskinit
 LOCAL_STATIC_LIBRARIES := \
     libbase \
-    libcompat \
     libpolicy \
     libxz \
     libinit-rs
@@ -89,6 +76,12 @@ LOCAL_SRC_FILES := \
     init/selinux.cpp \
     init/init-rs.cpp
 
+LOCAL_LDFLAGS := -static
+
+ifdef B_CRT0
+LOCAL_STATIC_LIBRARIES += crt0
+endif
+
 include $(BUILD_EXECUTABLE)
 
 endif
@@ -99,12 +92,9 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := magiskboot
 LOCAL_STATIC_LIBRARIES := \
     libbase \
-    libcompat \
-    libmincrypt \
     liblzma \
     liblz4 \
     libbz2 \
-    libfdt \
     libz \
     libzopfli \
     libboot-rs
@@ -112,14 +102,16 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_SRC_FILES := \
     boot/main.cpp \
     boot/bootimg.cpp \
-    boot/hexpatch.cpp \
     boot/compress.cpp \
     boot/format.cpp \
-    boot/dtb.cpp \
-    boot/ramdisk.cpp \
-    boot/pattern.cpp \
-    boot/cpio.cpp \
     boot/boot-rs.cpp
+
+LOCAL_LDFLAGS := -static
+
+ifdef B_CRT0
+LOCAL_STATIC_LIBRARIES += crt0
+LOCAL_LDFLAGS += -lm
+endif
 
 include $(BUILD_EXECUTABLE)
 
@@ -146,14 +138,13 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := resetprop
 LOCAL_STATIC_LIBRARIES := \
     libbase \
-    libnanopb \
     libsystemproperties \
     libmagisk-rs
 
 LOCAL_SRC_FILES := \
     core/applet_stub.cpp \
     core/resetprop/resetprop.cpp \
-    core/resetprop/persist.cpp
+    core/core-rs.cpp
 
 LOCAL_CFLAGS := -DAPPLET_STUB_MAIN=resetprop_main
 include $(BUILD_EXECUTABLE)
@@ -174,9 +165,7 @@ LOCAL_EXPORT_C_INCLUDES := $(LOCAL_C_INCLUDES)
 LOCAL_SRC_FILES := \
     sepolicy/api.cpp \
     sepolicy/sepolicy.cpp \
-    sepolicy/rules.cpp \
     sepolicy/policydb.cpp \
-    sepolicy/statement.cpp \
     sepolicy/policy-rs.cpp
 include $(BUILD_STATIC_LIBRARY)
 

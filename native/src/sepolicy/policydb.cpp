@@ -73,8 +73,8 @@ static bool check_precompiled(const char *precompiled) {
 }
 
 static void load_cil(struct cil_db *db, const char *file) {
-    auto d = mmap_data(file);
-    cil_add_file(db, (char *) file, (char *) d.buf, d.sz);
+    mmap_data d(file);
+    cil_add_file(db, file, (const char *) d.buf(), d.sz());
     LOGD("cil_add [%s]\n", file);
 }
 
@@ -237,7 +237,7 @@ bool sepolicy::to_file(const char *file) {
     // No partial writes are allowed to /sys/fs/selinux/load, thus the reason why we
     // first dump everything into memory, then directly call write system call
     heap_data data;
-    auto fp = make_channel_fp<byte_channel>(data);
+    auto fp = make_stream_fp<byte_stream>(data);
 
     policy_file_t pf;
     policy_file_init(&pf);
@@ -254,7 +254,7 @@ bool sepolicy::to_file(const char *file) {
     if (struct stat st{}; xfstat(fd, &st) == 0 && st.st_size > 0) {
         ftruncate(fd, 0);
     }
-    xwrite(fd, data.buf, data.sz);
+    xwrite(fd, data.buf(), data.sz());
 
     close(fd);
     return true;
