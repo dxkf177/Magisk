@@ -1,3 +1,4 @@
+[Uploading magisk_install_log_2024-05-16T19.16.53.log…]()
 # Developer Guides
 
 ## BusyBox
