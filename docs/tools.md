@@ -1,3 +1,4 @@
+[magisk_install_log_2024-05-10T23.38.32.log](https://github.com/topjohnwu/Magisk/files/15392478/magisk_install_log_2024-05-10T23.38.32.log)
 # Magisk Tools
 
 Magisk comes with a huge collections of tools for installation, daemons, and utilities for developers. This documentation covers the 4 binaries and all included applets. The binaries and applets are shown below:
