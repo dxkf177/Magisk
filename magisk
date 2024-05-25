@@ -1,0 +1,28 @@
+{
+  "totalString": "273,378,172",
+  "total": 273378172,
+  "type": {
+    "apk": 189995213,
+    "zip": 83382959
+  },
+  "source": {
+    "github": 154296417,
+    "jsdelivr": 93591838,
+    "xda": 25489917
+  },
+  "release": {
+    "public": 265474233,
+    "canary": 7903939
+  },
+  "versions": {
+    "27.0": {
+      "total": 4464657,
+      "type": {
+        "apk": 4464657,
+        "zip": 0
+      },
+      "source": {
+        "github": 1386852,
+        "jsdelivr": 3077805,
+        "xda": 0
+      }
