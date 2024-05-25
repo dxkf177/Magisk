@@ -60,3 +60,11 @@ Translate each and place them in the respective locations (`[module]/src/main/re
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+{
+  "totalString": "273,378,172",
+  "total": 273378172,
+  "type": {
+    "apk": 189995213,
+    "zip": 83382959
+  },
