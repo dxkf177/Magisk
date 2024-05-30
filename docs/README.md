@@ -1,3 +1,4 @@
+[Uploading magisk_log_2024-05-30T03.32.08.log…]()
 # Magisk Documentation
 
 - [Installation Instructions](install.md)
