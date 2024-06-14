@@ -1,3 +1,4 @@
+![ic_launcher](https://github.com/topjohnwu/Magisk/assets/161837166/81cacffa-cf1b-4ae0-b930-e3363b7de736)
 # Installation
 
 If you already have Magisk installed, it is **strongly recommended** to upgrade directly via the Magisk app using its "Direct Install" method. The following tutorial is only for the initial installation.
